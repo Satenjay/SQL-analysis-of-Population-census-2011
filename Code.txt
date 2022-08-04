@@ -1,0 +1,123 @@
+select*from projectsql.dbo.data1;
+
+select*from projectsql.dbo.data2;
+
+-- number of rows in dataset
+select count(*) from projectsql..Data1
+select count(*) from projectsql..Data2
+
+-- To generate dataset for two states(Bihar n jharkhand)
+select*from projectsql..Data1 where state in('Jharkhand' , 'Bihar')
+
+-- population of India
+select sum (population) as Population_sum from projectsql..Data2
+
+--Average growth in %
+select avg(Growth)*100 as Average_Growth from projectsql..Data1
+
+--Average growth in % state wise
+select State,avg(Growth)*100 as Average_Growth from projectsql..Data1 group by State;
+
+--Average sex ratio state wise
+select State,round(avg(Sex_Ratio),0) as Average_Sex_ratio from projectsql..Data1 group by State order by Average_Sex_ratio desc;
+
+--Average literacy rate state wise
+select State,round(avg(Literacy),0) as Average_Literacy from projectsql..Data1 group by State order by Average_Literacy desc;
+
+--Average literacy rate more than 90% state wise 
+select State,round(avg(Literacy),0) as Average_Literacy from projectsql..Data1 group by State having round(avg(Literacy),0)>90 order by Average_Literacy desc;
+
+-- top 3 states showing highest growth
+select top 3 State,avg(Growth)*100 as Average_Growth from projectsql..Data1 group by State order by Average_Growth desc;
+
+-- bottom 3 states showing highest growth
+select top 3 State,avg(Growth)*100 as Average_Growth from projectsql..Data1 group by State order by Average_Growth asc;
+
+--Top and bottom 3 states in literacy rate
+drop table if exists #topstates; --to avoid table is already exist error
+Create table #topstates (State nvarchar(255), topstate float) insert into #topstates
+select top 3 State,round(avg(Literacy),0) as literacy from projectsql..Data1 group by State order by literacy desc;
+select*from #topstates
+
+--bottom
+select top 3 State,round(avg(Literacy),0) as literacy from projectsql..Data1 group by State order by literacy asc;
+
+--Union (using subquerry)
+select*from(
+select top 3 State,round(avg(Literacy),0) as literacy from projectsql..Data1 group by State order by literacy desc) as a
+union
+select*from(
+select top 3 State,round(avg(Literacy),0) as literacy from projectsql..Data1 group by State order by literacy asc)  b
+
+--States starting with letter a
+select distinct State from projectsql..Data1 where lower(state) like'a%'
+
+--States starting with letter a and end with d
+select distinct State from projectsql..Data1 where lower(state) like'a%'
+
+---------------------------------------------------------------------------
+----------------------------------------------------------------------------
+
+--Total number of male and females 
+select d.state,sum(d.males) as total_males, sum(d.females) as total_females from
+(select c.district,c.state,round(c.population/(c.sex_ratio+1),0) as males, round((c.population*c.sex_ratio)/(c.sex_ratio+1),0) as females from
+---Joining both tables
+(select a.district, a.state, a.sex_ratio/1000 sex_ratio, b.population from projectsql..data1 as a inner join projectsql..data2 as b on a.district=b.district) c) d
+group by d.State;
+-- sex ratio = females/males
+-- population = females+males
+-- so, males = population/(sex ratio +1)
+
+--Total literacy rate
+select d.district, d.state, round((d.literacy_ratio*d.population),0) literate_people,round(((1-d.literacy_ratio)*d.population),0) illiterate_people from 
+(select a.district, a.state, a.Literacy/100 as literacy_ratio, b.population from projectsql..data1 as a inner join projectsql..data2 as b on a.district=b.district) d
+
+--literacy rate = total literate people/total population
+-- groupby for state level total literacy rate
+select c.state,sum(literate_people) total_literate_pop, sum(illiterate_people) total_illiterate_pop from 
+(select d.district, d.state, round((d.literacy_ratio*d.population),0) literate_people,round(((1-d.literacy_ratio)*d.population),0) illiterate_people from 
+(select a.district, a.state, a.Literacy/100 as literacy_ratio, b.population from projectsql..data1 as a inner join projectsql..data2 as b on a.district=b.district) d) 
+c group by c.State
+
+--Populatio in previous census
+select d.district, d.state, round(population/(1+growth),0) previous_census_population, population current_census_population from (
+select a.district, a.state, a.Growth growth, b.population from projectsql..data1 as a inner join projectsql..data2 as b on a.district=b.district) d
+
+-- previous cencus + growth*previous census = population
+
+--Populatio in previous census statewise
+select e.state,sum(e.previous_census_population) total_prev_pop, sum(e.current_census_population) total_cur_pop from (
+select d.district, d.state, round(population/(1+growth),0) previous_census_population, population current_census_population from (
+select a.district, a.state, a.Growth growth, b.population from projectsql..data1 as a inner join projectsql..data2 as b on a.district=b.district) d)
+e group by e.state
+
+--total Populatio of India in previous census and current 
+select sum(m.total_prev_pop) total_pre_pop, sum(m.total_cur_pop) total_cur_pop from(
+select e.state,sum(e.previous_census_population) total_prev_pop, sum(e.current_census_population) total_cur_pop from (
+select d.district, d.state, round(population/(1+growth),0) previous_census_population, population current_census_population from (
+select a.district, a.state, a.Growth growth, b.population from projectsql..data1 as a inner join projectsql..data2 as b on a.district=b.district) d)
+e group by e.state) m
+
+--Population vs area
+--joining tables via key
+select (g.total_area/g.previous_census_population)  as previous_census_population_vs_area, (g.total_area/g.current_census_population) as 
+current_census_population_vs_area from
+(select q.*,r.total_area from (
+
+select '1' as keyy,n.* from
+(select sum(m.previous_census_population) previous_census_population,sum(m.current_census_population) current_census_population from(
+select e.state,sum(e.previous_census_population) previous_census_population,sum(e.current_census_population) current_census_population from
+(select d.district,d.state,round(d.population/(1+d.growth),0) previous_census_population,d.population current_census_population from
+(select a.district,a.state,a.growth growth,b.population from projectsql..data1 a inner join projectsql..data2 b on a.district=b.district) d) e
+group by e.state)m) n) q inner join (
+
+select '1' as keyy,z.* from (
+select sum(area_km2) total_area from projectsql..data2)z) r on q.keyy=r.keyy)g
+
+--Window function
+-- Top 3 districts from each state having highest literacy rate
+output top 3 districts from each state with highest literacy rate
+select a.* from
+(select district,state,literacy,rank() over(partition by state order by literacy desc) rnk from projectsql..data1) a
+
+where a.rnk in (1,2,3) order by state
